@@ -1,0 +1,11 @@
+# SketchUp backups and autosaves
+*.skb
+*~.skp
+# schedules written next to the build script (issued copies live in data/)
+sketchup/*_drop_schedule.csv
+# generated depth-map data
+tools/depthmap_data.js
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

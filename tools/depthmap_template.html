@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Option 3 Depth Map</title>
+<style>body{margin:0;background:#f3f0ea}canvas{display:block;width:100%;height:auto}</style></head><body>
+<canvas id="c" width="2400" height="830"></canvas>
+<script>/*DATA*/</script>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d'),BW=cv.width,BH=cv.height;
+const PAPER='#f3f0ea',INK='#26221e',MUTE='#6f675d',Lmin=0.45,Lmax=1.65;
+const F=(w,s)=>`${w} ${s}px "Segoe UI",system-ui,sans-serif`;
+const T=[];for(const [c,r,L] of DATA.A)(T[r-1]??=[])[c-1]=L;
+const X0=140,Y0=150,S=2160/33,W=33*S,H=8*S; // 65.45 px per m, to scale
+const shade=t=>{const a=[236,229,217],b=[34,30,27];return a.map((v,i)=>Math.round(v+(b[i]-v)*t))};
+const at=(px,py)=>{ // drop at a pixel inside the plan (bilinear between points)
+  const fx=Math.min(Math.max(px/S/0.22-0.5,0),149),fy=Math.min(Math.max((H-py)/S/0.25-0.5,0),31);
+  const c0=Math.min(Math.floor(fx),148),r0=Math.min(Math.floor(fy),30),ax=fx-c0,ay=fy-r0;
+  return (T[r0][c0]*(1-ax)+T[r0][c0+1]*ax)*(1-ay)+(T[r0+1][c0]*(1-ax)+T[r0+1][c0+1]*ax)*ay};
+g.fillStyle=PAPER;g.fillRect(0,0,BW,BH);
+g.save();g.font=F(600,26);g.letterSpacing='6px';g.fillStyle=INK;g.fillText('OPTION 3  ·  DEPTH MAP  (TOP VIEW)',60,62);g.restore();
+g.font=F(400,18);g.fillStyle=MUTE;g.fillText('Nine pockets, four of them steep. Drop from hanging base to bottom of fitting, 0.45 – 1.65 m. Contours every 0.10 m.',60,96);
+// field + contours
+const iw=Math.round(W),ih=Math.round(H),im=g.createImageData(iw,ih),Lg=new Float32Array(iw*ih);
+for(let y=0;y<ih;y++)for(let x=0;x<iw;x++)Lg[y*iw+x]=at(x,y);
+for(let y=0;y<ih;y++)for(let x=0;x<iw;x++){const L=Lg[y*iw+x];let [r,gg,b]=shade((L-Lmin)/(Lmax-Lmin));
+  const band=Math.floor(L/0.1+1e-6),k=(y*iw+x)*4;
+  const edge=(x+1<iw&&Math.floor(Lg[y*iw+x+1]/0.1+1e-6)!==band)||(y+1<ih&&Math.floor(Lg[(y+1)*iw+x]/0.1+1e-6)!==band);
+  if(edge){const major=Math.abs(Math.round(L*2)/2-L)<0.051&&Math.round(L*10)%5===0;const m=L>1.05?1.45:0.72;
+    r=Math.min(255,r*m);gg=Math.min(255,gg*m);b=Math.min(255,b*m);if(major){r*=m;gg*=m;b*=m}}
+  im.data[k]=r;im.data[k+1]=gg;im.data[k+2]=b;im.data[k+3]=255}
+g.putImageData(im,X0,Y0);
+// panel grid + points
+g.strokeStyle='rgba(60,52,44,.12)';g.lineWidth=1;
+for(let x=0;x<=33.01;x+=1.1){g.beginPath();g.moveTo(X0+x*S,Y0);g.lineTo(X0+x*S,Y0+H);g.stroke()}
+for(let y=0;y<=8.01;y+=1){g.beginPath();g.moveTo(X0,Y0+y*S);g.lineTo(X0+W,Y0+y*S);g.stroke()}
+for(const [c,r,L] of DATA.A){const t=(L-Lmin)/(Lmax-Lmin);g.beginPath();g.arc(X0+0.22*(c-0.5)*S,Y0+H-0.25*(r-0.5)*S,1.3+1.3*t,0,7);
+  g.fillStyle=`rgba(255,250,240,${.55+.45*t})`;g.fill()}
+g.strokeStyle=INK;g.lineWidth=1.6;g.strokeRect(X0,Y0,W,H);
+// pocket labels
+for(const p of POCKETS){const x=X0+p.x*S,y=Y0+H/2-p.y*S;
+  g.beginPath();g.arc(x,y,7,0,7);g.fillStyle=p.steep?'#c8743a':'#fffaf0';g.fill();g.strokeStyle=INK;g.lineWidth=1.5;g.stroke();
+  const lab=`P${p.n}  ${p.drop.toFixed(2)} m${p.steep?'  STEEP':''}`;g.font=F(600,17);const w=g.measureText(lab).width+16;
+  const ly=y+(p.y>0?30:-22);g.fillStyle='rgba(243,240,234,.92)';g.fillRect(x-w/2,ly-17,w,24);g.fillStyle=INK;g.textAlign='center';g.fillText(lab,x,ly);g.textAlign='left'}
+// axes
+g.font=F(400,16);g.fillStyle=MUTE;g.textAlign='center';
+for(let m=0;m<=33;m++){const x=X0+m*S;g.strokeStyle=INK;g.lineWidth=1;g.beginPath();g.moveTo(x,Y0+H);g.lineTo(x,Y0+H+(m%5?6:12));g.stroke();if(m%5===0||m===33)g.fillText(m+' m',x,Y0+H+34)}
+g.textAlign='right';for(let m=0;m<=8;m+=2)g.fillText(m+' m',X0-14,Y0+H-m*S+6);g.textAlign='left';
+g.save();g.translate(52,Y0+H/2);g.rotate(-Math.PI/2);g.textAlign='center';g.font=F(500,18);g.fillStyle=INK;g.fillText('8.00 m',0,0);g.restore();
+g.font=F(500,18);g.fillStyle=INK;g.textAlign='center';g.fillText('33.00 m',X0+W/2,Y0-18);g.textAlign='left';
+// legend
+const lx=X0,ly=Y0+H+70,lw=520;const gr=g.createLinearGradient(lx,0,lx+lw,0);gr.addColorStop(0,'rgb(236,229,217)');gr.addColorStop(1,'rgb(34,30,27)');
+g.fillStyle=gr;g.fillRect(lx,ly,lw,22);g.strokeStyle=INK;g.strokeRect(lx,ly,lw,22);
+g.font=F(500,16);g.fillStyle=INK;g.fillText('0.45 m  min. drop',lx,ly+46);g.textAlign='right';g.fillText('1.65 m  max. drop',lx+lw,ly+46);g.textAlign='left';
+g.beginPath();g.arc(lx+620,ly+11,7,0,7);g.fillStyle='#c8743a';g.fill();g.strokeStyle=INK;g.stroke();g.fillStyle=INK;g.fillText('steep pocket (sharp walls, full bottom)',lx+636,ly+17);
+g.beginPath();g.arc(lx+1020,ly+11,7,0,7);g.fillStyle='#fffaf0';g.fill();g.stroke();g.fillStyle=INK;g.fillText('soft pocket (gentle bowl)',lx+1036,ly+17);
+g.fillStyle=MUTE;g.fillText('Front edge = bottom of plan. Plan to scale. Grid = 1.06 × 0.96 cladding panels.',lx+1290,ly+17);
+document.title='READY';
+</script></body></html>

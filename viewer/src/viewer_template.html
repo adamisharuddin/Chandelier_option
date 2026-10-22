@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ajdan Chandelier Options</title>
+<style>
+:root{--bg:#0b0a09;--ink:#efe9df;--mute:#a39a8d;--chip:rgba(20,18,16,.72);--line:rgba(255,255,255,.12)}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.4 system-ui,Segoe UI,sans-serif;overflow:hidden}
+canvas{display:block}
+#hud{position:fixed;left:16px;top:16px;max-width:calc(100% - 32px)}
+#hud h1{font-size:15px;font-weight:600;letter-spacing:.04em;margin:0}
+#hud p{margin:2px 0 0;color:var(--mute);font-size:12px}
+#bar{position:fixed;left:16px;bottom:16px;right:16px;display:flex;flex-wrap:wrap;gap:6px}
+#bar button{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 11px;font:inherit;cursor:pointer;backdrop-filter:blur(6px)}
+#bar button.on{background:#efe9df;color:#141210}
+#bar .sep{width:10px}#bar button.opt{font-weight:600}#bar button.opt.on{background:#ffb15c;color:#141210;border-color:#ffb15c}
+body.shot #hud,body.shot #bar{display:none}
+#board{position:fixed;inset:0;overflow:auto;background:#e9e5de;display:none;padding:16px 16px 80px;box-sizing:border-box}
+#board canvas{width:100%;max-width:2400px;height:auto;margin:0 auto;box-shadow:0 2px 18px rgba(0,0,0,.18)}
+body.board #board{display:block}body.board #hud{display:none}
+body.board #bar button{background:rgba(40,36,32,.85)}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body>
+<div id="hud"><h1>AJDAN CITYSCAPE 2026 · CHANDELIER <span id="optname">OPTION 1</span></h1><p><span id="optdesc"></span> · 33.00 × 8.00 m · 4,800 pendants · drop 0.45–1.65 m</p></div>
+<div id="board"><canvas id="bc" width="2400" height="1790"></canvas></div>
+<div id="bar"></div>
+<script>/*DATA*/</script>
+<script>
+// ---------- Drawing board (2D, from the same drop data) ----------
+const OPTS={
+  '1':{name:'OPTION 1',desc:'Smooth Wave',note:'1.  Option 1: long profile from client sketch, pockets alternating across the width.'},
+  '2':{name:'OPTION 2',desc:'Nine Pockets',note:'1.  Option 2: nine pockets alternating across the width, four of them steep.'}};
+function drawBoard(cv,key){
+  const g=cv.getContext('2d'),BW=cv.width,BH=cv.height;
+  const P=DATA[key].map(([c,r,L])=>({c,r,L,x:0.22*(c-0.5),y:0.25*(r-0.5)})); // x 0..33 from left, y 0..8 from front
+  const Lmin=0.45,Lmax=1.65,FITB=0.40,Ls=P.map(p=>p.L),mean=Ls.reduce((a,b)=>a+b,0)/Ls.length;
+  const PAPER='#f3f0ea',INK='#26221e',MUTE='#6f675d',RULE='#cfc8bd';
+  const F=(w,s)=>`${w} ${s}px "Segoe UI",system-ui,sans-serif`;
+  const head=(t,x,y)=>{g.save();g.font=F(600,24);g.letterSpacing='6px';g.fillStyle=INK;g.fillText(t,x,y);g.restore()};
+  const txt=(t,x,y,s=17,c=INK,al='left',w=400)=>{g.font=F(w,s);g.fillStyle=c;g.textAlign=al;g.fillText(t,x,y);g.textAlign='left'};
+  const dim=(x1,y1,x2,y2,label,vert=false)=>{g.strokeStyle=INK;g.lineWidth=1.2;g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();
+    const t=(x,y)=>{g.beginPath();g.moveTo(x-6,y+6);g.lineTo(x+6,y-6);g.stroke()};t(x1,y1);t(x2,y2);
+    if(label){g.font=F(500,20);const w=g.measureText(label).width+20;g.fillStyle=PAPER;
+      if(vert){g.save();g.translate(x1-14,(y1+y2)/2);g.rotate(-Math.PI/2);g.textAlign='center';g.fillStyle=INK;g.fillText(label,0,0);g.restore()}
+      else{g.fillRect((x1+x2)/2-w/2,y1-14,w,28);g.fillStyle=INK;g.textAlign='center';g.fillText(label,(x1+x2)/2,y1+7);g.textAlign='left'}}};
+  const shade=t=>{const a=[233,226,214],b=[38,34,31];return a.map((v,i)=>Math.round(v+(b[i]-v)*t))};
+  // smooth heat field: bilinear between the 150 x 32 points at 6x resolution, optional contour bands
+  const heat=(bands)=>{const T=[];for(const p of P){(T[p.r-1]??=[])[p.c-1]=(p.L-Lmin)/(Lmax-Lmin)}
+    const SX=900,SY=192,o=document.createElement('canvas');o.width=SX;o.height=SY;const og=o.getContext('2d'),im=og.createImageData(SX,SY);
+    for(let py=0;py<SY;py++)for(let px=0;px<SX;px++){
+      const fx=Math.min(Math.max(px/SX*150-0.5,0),149),fy=Math.min(Math.max((SY-1-py)/SY*32-0.5,0),31);
+      const c0=Math.min(Math.floor(fx),148),r0=Math.min(Math.floor(fy),30),ax=fx-c0,ay=fy-r0;
+      let t=(T[r0][c0]*(1-ax)+T[r0][c0+1]*ax)*(1-ay)+(T[r0+1][c0]*(1-ax)+T[r0+1][c0+1]*ax)*ay;
+      if(bands)t=Math.round(t*bands)/bands;const [r,gg,b]=shade(t),k=(py*SX+px)*4;
+      im.data[k]=r;im.data[k+1]=gg;im.data[k+2]=b;im.data[k+3]=255}
+    og.putImageData(im,0,0);return o};
+  g.fillStyle=PAPER;g.fillRect(0,0,BW,BH);
+  const X0=120,S=2220/33,V=S*2;            // elevations: vertical scale x2
+  const rule=y=>{g.strokeStyle=RULE;g.lineWidth=1.5;g.beginPath();g.moveTo(40,y);g.lineTo(BW-40,y);g.stroke()};
+
+  // 1. PLAN
+  head('TOP VIEW  /  PLAN',50,52);
+  const py=100,ph=8*S;
+  g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(heat(0),X0,py,33*S,ph);
+  g.strokeStyle='rgba(60,52,44,.18)';g.lineWidth=1;
+  for(let x=0;x<=33.01;x+=1.1){g.beginPath();g.moveTo(X0+x*S,py);g.lineTo(X0+x*S,py+ph);g.stroke()}
+  for(let y=0;y<=8.01;y+=1){g.beginPath();g.moveTo(X0,py+y*S);g.lineTo(X0+33*S,py+y*S);g.stroke()}
+  for(const p of P){const t=(p.L-Lmin)/(Lmax-Lmin);g.beginPath();g.arc(X0+p.x*S,py+ph-p.y*S,2.2+1.6*t,0,7);
+    g.fillStyle=t>.45?'#fbf6ec':'rgba(255,253,248,.95)';g.fill();g.strokeStyle=`rgba(50,42,36,${.55-.4*t})`;g.lineWidth=.9;g.stroke()}
+  g.strokeStyle=INK;g.lineWidth=1.5;g.strokeRect(X0,py,33*S,ph);
+  dim(X0,py-26,X0+33*S,py-26,'33.00 m');dim(X0-34,py,X0-34,py+ph,'8.00 m',true);
+  for(let m=0;m<=33;m+=5){txt(m+' m',X0+m*S,py+ph+30,16,MUTE,'center')}txt('33 m',X0+33*S,py+ph+30,16,MUTE,'center');
+  rule(py+ph+56);
+
+  // 2. LONG ELEVATION
+  const ly=py+ph+120;head('LONG ELEVATION  (33 m)',50,ly-14);
+  const ely=ly+40;
+  const drawElev=(ox,pos,order)=>{const list=[...P].sort(order);
+    g.strokeStyle=INK;g.lineWidth=3;g.beginPath();g.moveTo(ox-10,ely);g.lineTo(ox+pos(list[0],true)+10,ely);g.stroke();
+    for(const p of list){const x=ox+pos(p),yb=ely+p.L*V,yt=ely+(p.L-FITB)*V;
+      g.strokeStyle='rgba(40,36,32,.10)';g.lineWidth=1;g.beginPath();g.moveTo(x,ely);g.lineTo(x,yt);g.stroke();
+      g.strokeStyle='rgba(25,22,20,.30)';g.lineWidth=2.2;g.beginPath();g.moveTo(x,yt);g.lineTo(x,yb-3);g.stroke();
+      g.beginPath();g.arc(x,yb,2.7,0,7);g.fillStyle='#fffaf0';g.fill();g.strokeStyle='rgba(40,34,28,.55)';g.lineWidth=.8;g.stroke()}};
+  drawElev(X0,(p,end)=>end?33*S:p.x*S,(a,b)=>b.r-a.r);
+  const lvl=(ox,w,L,lab)=>{const y=ely+L*V;g.setLineDash([6,6]);g.strokeStyle=MUTE;g.lineWidth=1;g.beginPath();g.moveTo(ox-14,y);g.lineTo(ox+w,y);g.stroke();g.setLineDash([]);
+    txt(lab,ox-20,y+6,16,INK,'right',500)};
+  txt('CEILING / HANGING BASE',X0+33*S,ely-12,15,MUTE,'right',600);
+  lvl(X0,0,Lmin,'0.45 m');lvl(X0,0,Lmax,'1.65 m');
+  txt('min. drop',X0-20,ely+Lmin*V+24,13,MUTE,'right');txt('max. drop',X0-20,ely+Lmax*V+24,13,MUTE,'right');
+  dim(X0,ely+Lmax*V+44,X0+33*S,ely+Lmax*V+44,'33.00 m');
+  const r3=ely+Lmax*V+80;rule(r3);
+
+  // 3. SHORT ELEVATION + HEAT MAP
+  const sy=r3+64;head('SHORT ELEVATION  (8 m)',50,sy-14);
+  const sx0=X0+40;
+  {const ely0=ely;const dy=sy+40-ely;g.save();g.translate(0,dy);
+    drawElev(sx0,(p,end)=>end?8*S:p.y*S,(a,b)=>b.c-a.c);
+    txt('CEILING / HANGING BASE',sx0+8*S,ely0-12,15,MUTE,'right',600);
+    lvl(sx0,0,Lmin,'0.45 m');lvl(sx0,0,Lmax,'1.65 m');
+    dim(sx0,ely0+Lmax*V+44,sx0+8*S,ely0+Lmax*V+44,'8.00 m');g.restore()}
+  const hx=sx0+8*S+170,hw=1110,hh=hw*8/33;head('DROP HEAT MAP  (TOP VIEW)',hx,sy-14);
+  g.drawImage(heat(12),hx,sy+30,hw,hh);g.strokeStyle=INK;g.lineWidth=1.2;g.strokeRect(hx,sy+30,hw,hh);
+  dim(hx,sy+30+hh+30,hx+hw,sy+30+hh+30,'33.00 m');
+  const lgx=hx+hw+50,lgy=sy+30,lgh=hh;const gr=g.createLinearGradient(0,lgy,0,lgy+lgh);gr.addColorStop(0,'rgb(233,226,214)');gr.addColorStop(1,'rgb(38,34,31)');
+  g.fillStyle=gr;g.fillRect(lgx,lgy,34,lgh);g.strokeRect(lgx,lgy,34,lgh);
+  txt('Minimum drop',lgx+48,lgy+16,15,MUTE);txt('0.45 m',lgx+48,lgy+38,17,INK,'left',600);
+  txt('Maximum drop',lgx+48,lgy+lgh-24,15,MUTE);txt('1.65 m',lgx+48,lgy+lgh-2,17,INK,'left',600);
+  const r4=sy+30+Math.max(Lmax*V+90,hh+70);
+  g.fillStyle='#ebe7e0';g.fillRect(0,r4,BW,BH-r4);rule(r4);
+
+  // 4. FOOTER
+  const fy=r4+56;head('KEY DIMENSIONS',50,fy);
+  [['Overall size (L × W)','33.00 × 8.00 m'],['Pendants','4,800  (150 × 32 at 0.22 × 0.25 m)'],['Chandelier body','0.40 m'],
+   ['Rod (hanging base → body)','0.05 – 1.25 m'],['Total drop (base → bottom of body)','0.45 – 1.65 m'],['Mean drop',mean.toFixed(2)+' m']]
+   .forEach(([k,v],i)=>{txt(k,50,fy+40+i*28,17,MUTE);txt(':  '+v,430,fy+40+i*28,17,INK,'left',500)});
+  g.strokeStyle=RULE;g.beginPath();g.moveTo(860,fy-20);g.lineTo(860,BH-30);g.moveTo(1880,fy-20);g.lineTo(1880,BH-30);g.stroke();
+  head('NOTES',900,fy);
+  [OPTS[key].note,'2.  Both options use the same 4,800 hanging points: 20 per 1.06 × 0.96 cladding panel.',
+   '3.  Drops rounded to 5 mm. Full drop schedule issued separately (CSV).','4.  Elevations drawn with vertical scale × 2. Plan and heat map to scale.',
+   '5.  Indicative; to be refined at detailed design stage.'].forEach((s,i)=>txt(s,900,fy+40+i*28,16,INK));
+  g.save();g.textAlign='center';g.font=F(600,20);g.letterSpacing='5px';g.fillStyle=INK;g.fillText('CHANDELIER INSTALLATION',2140,fy+10);
+  g.font=F(400,18);g.letterSpacing='2px';g.fillText(OPTS[key].name+'  ·  33 m × 8 m',2140,fy+48);
+  g.strokeStyle=INK;g.beginPath();g.moveTo(2100,fy+76);g.lineTo(2180,fy+76);g.stroke();
+  g.font=F(400,16);g.letterSpacing='6px';g.fillStyle=MUTE;g.fillText('AJDAN CITYSCAPE 2026',2140,fy+112);g.fillText('LIGHT IS EVERYTHING',2140,fy+142);g.restore();
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+
+const Q=new URLSearchParams(location.search);
+const SHOT=null;
+const W=+Q.get('w')||innerWidth,H=+Q.get('h')||innerHeight;
+
+// --- design data (metres) ---
+const CEIL=6.0;                 // assumed hall ceiling = hanging base
+const FIT=0.40,TIP=0.045,DIA=0.04;
+const HALL={x:41.5,z:18};      // client: hall 41.5 x 18 m
+let opt=(['1','2'].includes(location.hash.replace('#option-',''))?location.hash.replace('#option-',''):null)||Q.get('opt')||'1';
+const ptsOf=k=>DATA[k].map(([c,r,L])=>({x:-16.5+0.22*(c-0.5),z:-4+0.25*(r-0.5),L}));
+const pts=ptsOf(opt);
+
+const STYLES={
+ model:{name:'Massing',bg:0x1c1b1a,ceil:0xcfcac2,wall:0xd9d5ce,floor:0xc8c2b8,floorRough:.9,tube:0x1a1a1a,rod:0x1a1a1a,rodOp:.6,
+   tip:0xffb15c,tipI:2.2,amb:0.45,hemi:[0xffffff,0x8a8278,.8],sun:1.6,bloom:[.3,.2,.9],exposure:1.0,people:0xffffff,props:0xffffff,fog:null,downl:0},
+};
+let style='model';
+
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(SHOT?1:Math.min(devicePixelRatio,2));renderer.setSize(W,H);
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(50,W/H,0.1,200);
+const controls=new OrbitControls(cam,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI*0.98;
+
+// --- materials ---
+const M={ceil:new THREE.MeshStandardMaterial({roughness:.9}),wall:new THREE.MeshStandardMaterial({roughness:.95}),
+ floor:new THREE.MeshStandardMaterial({roughness:.4,metalness:.0}),tube:new THREE.MeshStandardMaterial({roughness:.32,metalness:.55}),
+ tip:new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xffe2b8,emissiveIntensity:6,roughness:.4}),
+ rod:new THREE.LineBasicMaterial({transparent:true}),people:new THREE.MeshStandardMaterial({roughness:.8}),
+ props:new THREE.MeshStandardMaterial({roughness:.7}),joint:new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:.35})};
+
+// --- hall ---
+const box=(w,h,d,mat,x,y,z,cast=false,recv=true)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=recv;scene.add(m);return m};
+box(HALL.x,0.2,HALL.z,M.floor,0,-0.1,0);
+const roof=box(HALL.x,0.2,HALL.z,M.ceil,0,CEIL+0.1,0);
+box(HALL.x,CEIL,0.3,M.wall,0,CEIL/2,-HALL.z/2);
+const nearWall=box(0.3,CEIL,HALL.z,M.wall,-HALL.x/2,CEIL/2,0);
+const frontWall=box(HALL.x,CEIL,0.3,M.wall,0,CEIL/2,HALL.z/2);
+box(0.3,CEIL,HALL.z,M.wall,HALL.x/2,CEIL/2,0);
+// pilasters on the back wall for rhythm
+for(let i=-5;i<=5;i++)box(0.6,CEIL,0.5,M.wall,i*4,CEIL/2,-HALL.z/2+0.4,true);
+// ceiling cladding joints (1.10 x 1.00 grid over the chandelier zone)
+{const v=[];for(let x=-16.5;x<=16.51;x+=1.1)v.push(x,CEIL-0.001,-4,x,CEIL-0.001,4);for(let z=-4;z<=4.01;z+=1)v.push(-16.5,CEIL-0.001,z,16.5,CEIL-0.001,z);
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));scene.add(new THREE.LineSegments(g,M.joint));}
+
+// --- chandelier (instanced) ---
+const N=pts.length,dm=new THREE.Object3D();
+const tubeG=new THREE.CylinderGeometry(DIA/2,DIA/2,FIT-TIP,14);tubeG.translate(0,-(FIT-TIP)/2,0);
+const tipG=new THREE.CylinderGeometry(DIA/2*0.96,DIA/2*0.96,TIP,14);tipG.translate(0,-TIP/2,0);
+const tubes=new THREE.InstancedMesh(tubeG,M.tube,N),tips=new THREE.InstancedMesh(tipG,M.tip,N);
+tubes.castShadow=true;tips.castShadow=false;
+const rv=[];
+pts.forEach((p,i)=>{const top=CEIL-(p.L-FIT);
+  dm.position.set(p.x,top,p.z);dm.updateMatrix();tubes.setMatrixAt(i,dm.matrix);
+  dm.position.set(p.x,top-(FIT-TIP),p.z);dm.updateMatrix();tips.setMatrixAt(i,dm.matrix);
+  rv.push(p.x,CEIL,p.z,p.x,top,p.z);});
+scene.add(tubes,tips);
+const rg=new THREE.BufferGeometry();rg.setAttribute('position',new THREE.Float32BufferAttribute(rv,3));
+const rods=new THREE.LineSegments(rg,M.rod);scene.add(rods);
+// switch option in place: same 4,800 positions, new drops
+function setGeometry(k){const ps=ptsOf(k),ra=rg.attributes.position.array;
+  ps.forEach((p,i)=>{const top=CEIL-(p.L-FIT);
+    dm.position.set(p.x,top,p.z);dm.updateMatrix();tubes.setMatrixAt(i,dm.matrix);
+    dm.position.set(p.x,top-(FIT-TIP),p.z);dm.updateMatrix();tips.setMatrixAt(i,dm.matrix);
+    ra[i*6+4]=top});
+  tubes.instanceMatrix.needsUpdate=tips.instanceMatrix.needsUpdate=rg.attributes.position.needsUpdate=true;
+  tubes.computeBoundingSphere();tips.computeBoundingSphere();rg.computeBoundingSphere()}
+
+nearWall.visible=frontWall.visible=false; // client: keep back + right walls only
+// --- scale: people + exhibition model tables (Cityscape) ---
+const person=(x,z,h=1.75)=>{const g=new THREE.Group();const b=new THREE.Mesh(new THREE.CapsuleGeometry(0.17,h-0.62,4,10),M.people);b.position.y=(h-0.22)/2+0.02;
+  const hd=new THREE.Mesh(new THREE.SphereGeometry(0.11,12,10),M.people);hd.position.y=h-0.11;g.add(b,hd);g.position.set(x,0,z);
+  g.traverse(o=>{o.castShadow=true;o.receiveShadow=true});scene.add(g)};
+[[-11,1.5],[-10.4,1.9],[-3.5,-1.2],[2.2,2.6],[2.8,2.3],[9,-0.6],[14.5,1.8],[-15,-2.5],[6,5.8],[-6,6.5]].forEach(([x,z],i)=>person(x,z,1.68+0.12*((i*7)%3)/2));
+const table=(x,z,w,d)=>{box(w,0.9,d,M.props,x,0.45,z,true);
+  let s=x*13.7+z*7.1;const rnd=()=>{s=Math.sin(s*91.3+17.7)*43758.5;return s-Math.floor(s)};
+  for(let i=0;i<26;i++){const bw=0.08+rnd()*0.18,bh=0.04+rnd()*rnd()*0.45;box(bw,bh,bw,M.props,x-w/2+0.15+rnd()*(w-0.3),0.9+bh/2,z-d/2+0.15+rnd()*(d-0.3),true)}};
+table(-8,0,3.2,1.8);table(5.5,-0.5,3.6,2.0);table(12.5,2.2,2.4,1.6);
+
+// --- lights ---
+const amb=new THREE.AmbientLight(0xffffff,.2);const hemi=new THREE.HemisphereLight();scene.add(amb,hemi);
+const sun=new THREE.DirectionalLight(0xfff4e6,1.5);sun.position.set(-14,22,12);sun.castShadow=true;
+sun.shadow.mapSize.set(4096,4096);Object.assign(sun.shadow.camera,{left:-24,right:24,top:12,bottom:-12,near:1,far:60});sun.shadow.bias=-0.0004;scene.add(sun);
+// warm pools under the deepest pockets (night look)
+const pools=[[-10,-0.4],[-1.3,1.6],[7,-1],[14.2,1.2]].map(([x,z])=>{const l=new THREE.PointLight(0xffd29a,0,14,2);l.position.set(x,3.6,z);scene.add(l);return l});
+
+// --- post ---
+const composer=new EffectComposer(renderer);composer.setSize(W,H);
+composer.addPass(new RenderPass(scene,cam));
+const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),1,.5,.2);composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function apply(k){style=k;const S=STYLES[k];
+  scene.background=new THREE.Color(S.bg);scene.fog=S.fog?new THREE.Fog(...S.fog):null;
+  M.ceil.color.set(S.ceil);M.wall.color.set(S.wall);M.floor.color.set(S.floor);M.floor.roughness=S.floorRough;
+  M.tube.color.set(S.tube);M.tip.emissive.set(S.tip);M.tip.emissiveIntensity=S.tipI;
+  M.rod.color.set(S.rod);M.rod.opacity=S.rodOp;M.people.color.set(S.people);M.props.color.set(S.props);
+  amb.intensity=S.amb;hemi.color.set(S.hemi[0]);hemi.groundColor.set(S.hemi[1]);hemi.intensity=S.hemi[2];
+  sun.intensity=S.sun;sun.visible=S.sun>0;pools.forEach(l=>l.intensity=S.downl*6);
+  [bloom.strength,bloom.radius,bloom.threshold]=S.bloom;renderer.toneMappingExposure=S.exposure;
+  document.documentElement.style.setProperty('--bg','#'+new THREE.Color(S.bg).getHexString());
+  document.querySelectorAll('[data-s]').forEach(b=>b.classList.toggle('on',b.dataset.s===k));}
+
+const VIEWS={
+ hero:{name:'Eye level',p:[-19,1.65,7.6],t:[-2,4.3,-1.5],fov:58},
+ under:{name:'Looking up',p:[-6.5,1.6,3.2],t:[-2,6,-1.5],fov:72},
+ long:{name:'Long elevation',p:[0,3.2,26],t:[0,4.6,0],fov:42,cut:true},
+ end:{name:'Short elevation',p:[-34,3.0,0],t:[0,4.8,0],fov:24},
+ aerial:{name:'Section 3/4',p:[-27,3.2,19],t:[-1,4.6,0],fov:42,cut:true},
+};
+function view(k){const V=VIEWS[k];scene.background=new THREE.Color(0xe9e5de);cam.position.set(...V.p);controls.target.set(...V.t);cam.fov=V.fov;cam.updateProjectionMatrix();controls.update();
+  document.querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===k));}
+
+const bar=document.getElementById('bar');
+const bc=document.getElementById('bc');let boardDrawn=null;
+function showBoard(on){document.body.classList.toggle('board',on);
+  if(on&&boardDrawn!==opt){drawBoard(bc,opt);boardDrawn=opt}
+  document.querySelectorAll('[data-v]').forEach(b=>b.classList.remove('on'));bb.classList.toggle('on',on);dl.style.display=on?'':'none'}
+function setOpt(k){opt=k;setGeometry(k);
+  document.getElementById('optname').textContent=OPTS[k].name;document.getElementById('optdesc').textContent=OPTS[k].desc;
+  document.querySelectorAll('[data-o]').forEach(b=>b.classList.toggle('on',b.dataset.o===k));
+  if(document.body.classList.contains('board')){drawBoard(bc,k);boardDrawn=k}
+  try{history.replaceState(null,'','#option-'+k)}catch(e){}}
+for(const [k,O] of Object.entries(OPTS)){const b=document.createElement('button');b.textContent=O.name.replace('OPTION','Option')+' · '+O.desc;b.dataset.o=k;b.className='opt';b.onclick=()=>setOpt(k);bar.appendChild(b)}
+bar.appendChild(Object.assign(document.createElement('span'),{className:'sep'}));
+for(const [k,V] of Object.entries(VIEWS)){const b=document.createElement('button');b.textContent=V.name;b.dataset.v=k;b.onclick=()=>{showBoard(false);view(k)};bar.appendChild(b)}
+bar.appendChild(Object.assign(document.createElement('span'),{className:'sep'}));
+const bb=Object.assign(document.createElement('button'),{textContent:'Drawing board',onclick:()=>showBoard(true)});bar.appendChild(bb);
+const dl=Object.assign(document.createElement('button'),{textContent:'Download PNG',onclick:()=>{const a=document.createElement('a');
+  a.download='Chandelier_Option'+opt+'_board.png';a.href=bc.toDataURL('image/png');a.click()}});dl.style.display='none';bar.appendChild(dl);
+
+apply(style);view(Q.get('view')||'hero');setOpt(opt);
+if(Q.get('mode')==='board')showBoard(true);
+addEventListener('resize',()=>{if(SHOT)return;cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);composer.setSize(innerWidth,innerHeight)});
+(function loop(){if(!document.body.classList.contains('board')){controls.update();composer.render()}requestAnimationFrame(loop)})();
+</script></body></html>
